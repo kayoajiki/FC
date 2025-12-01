@@ -15,15 +15,24 @@ Volt::route('sonoka', 'pages.sonoka')->name('sonoka');
 Volt::route('consultation', 'pages.consultation')->name('consultation');
 Volt::route('products', 'pages.products')->name('products');
 
+// コラム・記事
+Volt::route('column', 'column.index')->name('column.index');
+Volt::route('column/category/{category}', 'column.index')->name('column.category');
+Volt::route('column/{slug}', 'column.show')->name('column.show');
+
 // SEO
 Route::get('sitemap.xml', [App\Http\Controllers\SitemapController::class, 'index'])->name('sitemap');
 Route::get('robots.txt', [App\Http\Controllers\RobotsController::class, 'index'])->name('robots');
 
 Volt::route('dashboard', 'dashboard')
-    ->middleware(['auth', 'verified'])
+    ->middleware(['auth', 'verified', 'birth.profile'])
     ->name('dashboard');
 
 Route::middleware(['auth'])->group(function () {
+    Volt::route('birth-profile', 'auth.birth-profile')->name('birth-profile');
+});
+
+Route::middleware(['auth', 'birth.profile'])->group(function () {
     Route::redirect('settings', 'settings/profile');
 
     Volt::route('settings/profile', 'settings.profile')->name('profile.edit');
@@ -40,4 +49,9 @@ Route::middleware(['auth'])->group(function () {
             ),
         )
         ->name('two-factor.show');
+
+    // 管理画面（モック）
+    Volt::route('admin/articles', 'admin.articles.index')->name('admin.articles.index');
+    Volt::route('admin/articles/create', 'admin.articles.create')->name('admin.articles.create');
+    Volt::route('admin/articles/{id}/edit', 'admin.articles.edit')->name('admin.articles.edit');
 });

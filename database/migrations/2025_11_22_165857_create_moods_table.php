@@ -13,7 +13,14 @@ return new class extends Migration
     {
         Schema::create('moods', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('user_id')->constrained()->onDelete('cascade');
+            $table->date('date');
+            $table->integer('mood_rating'); // 1-5 heart rating
+            $table->string('mood_emoji')->nullable();
+            $table->text('memo')->nullable();
             $table->timestamps();
+            
+            $table->unique(['user_id', 'date']); // 1日1つの感情ログ
         });
     }
 

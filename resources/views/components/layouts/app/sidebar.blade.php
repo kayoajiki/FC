@@ -12,8 +12,19 @@
             </a>
 
             <flux:navlist variant="outline">
-                <flux:navlist.group :heading="__('Platform')" class="grid">
-                    <flux:navlist.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>{{ __('Dashboard') }}</flux:navlist.item>
+                <flux:navlist.group :heading="__('メニュー')" class="grid">
+                    <flux:navlist.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>
+                        <span style="font-family: 'Noto Sans JP', sans-serif;">ダッシュボード</span>
+                    </flux:navlist.item>
+                    <flux:navlist.item icon="document-text" :href="route('column.index')" :current="request()->routeIs('column.*')" wire:navigate>
+                        <span style="font-family: 'Noto Sans JP', sans-serif;">コラム</span>
+                    </flux:navlist.item>
+                </flux:navlist.group>
+                
+                <flux:navlist.group :heading="__('設定')" class="grid">
+                    <flux:navlist.item icon="user" :href="route('profile.edit')" :current="request()->routeIs('profile.edit')" wire:navigate>
+                        <span style="font-family: 'Noto Sans JP', sans-serif;">プロフィール</span>
+                    </flux:navlist.item>
                 </flux:navlist.group>
             </flux:navlist>
 
@@ -119,5 +130,6 @@
         {{ $slot }}
 
         @fluxScripts
+        @stack('scripts')
     </body>
 </html>

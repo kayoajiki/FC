@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Article;
 use App\Services\Fortune\FourPillarsService;
 use App\Services\Fortune\NumerologyService;
 use App\Services\Fortune\TarotService;
@@ -21,6 +22,18 @@ new class extends Component {
     public ?array $tarotResult = null;
     
     public bool $showResults = false;
+
+    /**
+     * Get featured articles for slider
+     */
+    public function getFeaturedArticlesProperty()
+    {
+        return Article::with(['category', 'tags'])
+            ->published()
+            ->orderBy('published_at', 'desc')
+            ->take(12)
+            ->get();
+    }
 
     /**
      * Get Japanese prefectures list.
@@ -209,19 +222,24 @@ new class extends Component {
         </div>
     </header>
     <!-- Hero Section -->
-    <section class="py-12 lg:py-20 text-center" style="background-color: #FFFDF9;">
-        <h1 class="text-4xl lg:text-5xl font-semibold mb-4 text-[#2A2E47] dark:text-[#FFFDF9] max-w-4xl mx-auto" style="font-family: 'Noto Sans JP', sans-serif; font-weight: 700;">
-            迷ったとき、自分に戻れる光を届ける
-        </h1>
-        <p class="text-lg text-[#2A2E47]/80 dark:text-[#FFFDF9]/80 max-w-2xl mx-auto mb-8" style="font-family: 'Noto Sans JP', sans-serif; font-weight: 400;">
-            Fortune Compassは、四柱推命・紫微斗数・数秘術・タロットの4つの占術を通じて、
-            あなた自身を深く知り、毎日の羅針盤として活用できるサービスです。
-        </p>
+    <section class="py-12 lg:py-20 pb-16 lg:pb-24 text-center relative overflow-hidden" style="background-color: #FFFDF9;">
+        <!-- 背景画像（透明度付き） -->
+        <div class="absolute inset-0 opacity-35" style="background-image: url('{{ asset('images/flower-hero.png') }}'); background-size: cover; background-position: center; background-repeat: no-repeat;"></div>
+        
+        <!-- コンテンツ -->
+        <div class="relative z-10 max-w-4xl mx-auto px-4">
+            <h1 class="text-4xl lg:text-5xl font-semibold mb-4 text-[#2A2E47] dark:text-[#FFFDF9]" style="font-family: 'Noto Sans JP', sans-serif; font-weight: 700;">
+                迷ったとき、自分に戻れる光を届ける
+            </h1>
+            <p class="text-lg text-[#2A2E47]/80 dark:text-[#FFFDF9]/80 max-w-2xl mx-auto mb-8" style="font-family: 'Noto Sans JP', sans-serif; font-weight: 400;">
+                Fortune Compassは、四柱推命・紫微斗数・数秘術・タロットの4つの占術を通じて、
+                あなた自身を深く知り、毎日の羅針盤として活用できるサービスです。
+            </p>
+        </div>
     </section>
 
     <!-- 4占術の簡易説明 -->
-    <section class="max-w-6xl mx-auto px-4 mb-12" style="background-color: #FFFDF9;">
-        <h2 class="text-3xl font-semibold mb-8 text-center text-[#2A2E47] dark:text-[#FFFDF9]" style="font-family: 'Noto Sans JP', sans-serif; font-weight: 700;">4つの占術について</h2>
+    <section class="max-w-6xl mx-auto px-4 mb-12 mt-8" style="background-color: #FFFDF9;">
         <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div class="bg-white dark:bg-[#2A2E47]/10 rounded-lg shadow-lg p-6 border border-[#F8A38A]/20 dark:border-[#E985A6]/20 hover:border-[#F8A38A] dark:hover:border-[#E985A6] transition-colors">
                 <h3 class="text-xl font-semibold mb-3 text-[#2A2E47] dark:text-[#FFFDF9]" style="font-family: 'Noto Sans JP', sans-serif; font-weight: 600;">四柱推命</h3>
@@ -253,7 +271,7 @@ new class extends Component {
             <div class="bg-white dark:bg-[#2A2E47]/10 rounded-lg shadow-lg p-6 border border-[#F8A38A]/20 dark:border-[#E985A6]/20 hover:border-[#F8A38A] dark:hover:border-[#E985A6] transition-colors">
                 <h3 class="text-xl font-semibold mb-3 text-[#2A2E47] dark:text-[#FFFDF9]" style="font-family: 'Noto Sans JP', sans-serif; font-weight: 600;">タロット</h3>
                 <p class="text-sm text-[#2A2E47]/70 dark:text-[#FFFDF9]/70 mb-4" style="font-family: 'Noto Sans JP', sans-serif; font-weight: 400;">
-                    78枚のカードから、今この瞬間に必要なメッセージを受け取ります。
+                    78枚のカードから、今この瞬間のメッセージを引き出します。
                 </p>
                 <a href="{{ route('tarot') }}" class="text-sm text-[#F8A38A] dark:text-[#E985A6] hover:text-[#E985A6] dark:hover:text-[#F9C97D] transition-colors inline-flex items-center gap-1">
                     詳しく見る →
@@ -425,13 +443,34 @@ new class extends Component {
                 @if($tarotResult)
                     <div class="bg-white/90 dark:bg-[#2A2E47]/90 backdrop-blur-sm rounded-lg shadow-lg p-6 border border-[#F9C97D]/30 dark:border-[#F9C97D]/30 hover:border-[#F9C97D] dark:hover:border-[#F9C97D] transition-colors">
                         <h3 class="text-xl font-semibold mb-4 text-[#2A2E47] dark:text-[#FFFDF9]" style="font-family: 'Noto Sans JP', sans-serif; font-weight: 600;">タロット</h3>
-                        <div class="space-y-3">
+                        <div class="space-y-4">
+                            <!-- カード画像 -->
+                            @if(!empty($tarotResult['card_image']))
+                                <div class="text-center">
+                                    <img 
+                                        src="{{ $tarotResult['card_image'] }}" 
+                                        alt="{{ $tarotResult['card_name'] ?? '' }}"
+                                        class="w-32 h-48 mx-auto object-contain rounded-lg shadow-md {{ $tarotResult['position'] === '逆位置' ? 'rotate-180' : '' }}"
+                                        onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"
+                                    />
+                                    <div class="w-32 h-48 mx-auto bg-[#F9C97D]/20 rounded-lg shadow-md flex items-center justify-center hidden" style="display: none;">
+                                        <span class="text-2xl">🃏</span>
+                                    </div>
+                                </div>
+                            @else
+                                <div class="text-center">
+                                    <div class="w-32 h-48 mx-auto bg-[#F9C97D]/20 rounded-lg shadow-md flex items-center justify-center">
+                                        <span class="text-2xl">🃏</span>
+                                    </div>
+                                </div>
+                            @endif
+                            
                             <div class="text-center">
-                                <p class="font-medium text-[#2A2E47] dark:text-[#FFFDF9]" style="font-family: 'Noto Sans JP', sans-serif; font-weight: 600;">{{ $tarotResult['card_name'] ?? '' }}</p>
-                                <p class="text-sm text-[#F9C97D] dark:text-[#F9C97D]" style="font-family: 'Noto Sans JP', sans-serif;">{{ $tarotResult['position'] ?? '' }}</p>
+                                <p class="font-medium text-[#2A2E47] dark:text-[#FFFDF9] mb-1" style="font-family: 'Noto Sans JP', sans-serif; font-weight: 600;">{{ $tarotResult['card_name'] ?? '' }}</p>
+                                <p class="text-sm text-[#F9C97D] dark:text-[#F9C97D] mb-3" style="font-family: 'Noto Sans JP', sans-serif;">{{ $tarotResult['position'] ?? '' }}</p>
                             </div>
                             <div>
-                                <p class="text-sm text-[#2A2E47]/80 dark:text-[#FFFDF9]/80" style="font-family: 'Noto Sans JP', sans-serif;">{{ $tarotResult['message'] ?? '' }}</p>
+                                <p class="text-sm text-[#2A2E47]/80 dark:text-[#FFFDF9]/80 leading-relaxed" style="font-family: 'Noto Sans JP', sans-serif;">{{ $tarotResult['message'] ?? '' }}</p>
                             </div>
                         </div>
                     </div>
@@ -460,25 +499,168 @@ new class extends Component {
                 @endauth
             </div>
 
-            <!-- 関連記事への誘導 -->
-            <div class="mt-8 text-center">
-                <h3 class="text-xl font-semibold mb-4 text-[#2A2E47] dark:text-[#FFFDF9]" style="font-family: 'Noto Sans JP', sans-serif; font-weight: 600;">関連記事</h3>
-                <div class="flex flex-wrap gap-4 justify-center">
-                    <a href="{{ route('four-pillars') }}" class="text-sm text-[#2A2E47]/70 dark:text-[#FFFDF9]/70 hover:text-[#F8A38A] dark:hover:text-[#E985A6] transition-colors" style="font-family: 'Noto Sans JP', sans-serif;">
-                        四柱推命で見る自分の強みを活かす方法
-                    </a>
-                    <span class="text-[#2A2E47]/50 dark:text-[#FFFDF9]/50">•</span>
-                    <a href="{{ route('numerology') }}" class="text-sm text-[#2A2E47]/70 dark:text-[#FFFDF9]/70 hover:text-[#F8A38A] dark:hover:text-[#E985A6] transition-colors" style="font-family: 'Noto Sans JP', sans-serif;">
-                        数秘術から見る人生のテーマ
-                    </a>
-                    <span class="text-[#2A2E47]/50 dark:text-[#FFFDF9]/50">•</span>
-                    <a href="{{ route('tarot') }}" class="text-sm text-[#2A2E47]/70 dark:text-[#FFFDF9]/70 hover:text-[#F8A38A] dark:hover:text-[#E985A6] transition-colors" style="font-family: 'Noto Sans JP', sans-serif;">
-                        タロットの読み方と活かし方
-                    </a>
-                </div>
-            </div>
         </section>
     @endif
+
+    <!-- コラムスライダー（フッターの上） -->
+    <section class="max-w-7xl mx-auto px-4 py-12" style="background-color: #FFFDF9;">
+        
+        @if($this->featuredArticles->count() > 0)
+            <div class="relative overflow-hidden">
+                <!-- スライダーコンテナ -->
+                <div class="column-slider-wrapper">
+                    <div class="column-slider-track" id="columnSliderTop">
+                        @foreach($this->featuredArticles as $article)
+                            <div class="column-slide">
+                                <a href="{{ route('column.show', $article->slug) }}" class="block group">
+                                    <div class="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow duration-300">
+                                        @if($article->featured_image)
+                                            <div class="aspect-w-16 aspect-h-9 bg-gray-200 overflow-hidden">
+                                                <img 
+                                                    src="{{ asset($article->featured_image) }}" 
+                                                    alt="{{ $article->title }}"
+                                                    class="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
+                                                    onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                                                >
+                                                <div class="w-full h-48 bg-gradient-to-br from-[#F8A38A] to-[#E985A6] flex items-center justify-center hidden">
+                                                    <span class="text-4xl text-white">📝</span>
+                                                </div>
+                                            </div>
+                                        @else
+                                            <div class="w-full h-48 bg-gradient-to-br from-[#F8A38A] to-[#E985A6] flex items-center justify-center">
+                                                <span class="text-4xl text-white">📝</span>
+                                            </div>
+                                        @endif
+                                        <div class="p-4">
+                                            @if($article->category)
+                                                <span class="inline-block px-2 py-1 text-xs font-semibold text-[#F8A38A] bg-[#F8A38A]/10 rounded mb-2">
+                                                    {{ $article->category->name }}
+                                                </span>
+                                            @endif
+                                            <h3 class="text-lg font-semibold text-[#2A2E47] dark:text-[#FFFDF9] line-clamp-2 group-hover:text-[#F8A38A] transition-colors" style="font-family: 'Noto Sans JP', sans-serif; font-weight: 600;">
+                                                {{ $article->title }}
+                                            </h3>
+                                            @if($article->excerpt)
+                                                <p class="text-sm text-[#2A2E47]/70 dark:text-[#FFFDF9]/70 mt-2 line-clamp-2" style="font-family: 'Noto Sans JP', sans-serif;">
+                                                    {{ $article->excerpt }}
+                                                </p>
+                                            @endif
+                                            <time class="text-xs text-[#2A2E47]/50 dark:text-[#FFFDF9]/50 mt-2 block" datetime="{{ $article->published_at->format('Y-m-d') }}">
+                                                {{ $article->published_at->format('Y年m月d日') }}
+                                            </time>
+                                        </div>
+                                    </div>
+                                </a>
+                            </div>
+                        @endforeach
+                        <!-- ループ用に最初の記事を複製 -->
+                        @foreach($this->featuredArticles->take(4) as $article)
+                            <div class="column-slide">
+                                <a href="{{ route('column.show', $article->slug) }}" class="block group">
+                                    <div class="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow duration-300">
+                                        @if($article->featured_image)
+                                            <div class="aspect-w-16 aspect-h-9 bg-gray-200 overflow-hidden">
+                                                <img 
+                                                    src="{{ asset($article->featured_image) }}" 
+                                                    alt="{{ $article->title }}"
+                                                    class="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
+                                                    onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                                                >
+                                                <div class="w-full h-48 bg-gradient-to-br from-[#F8A38A] to-[#E985A6] flex items-center justify-center hidden">
+                                                    <span class="text-4xl text-white">📝</span>
+                                                </div>
+                                            </div>
+                                        @else
+                                            <div class="w-full h-48 bg-gradient-to-br from-[#F8A38A] to-[#E985A6] flex items-center justify-center">
+                                                <span class="text-4xl text-white">📝</span>
+                                            </div>
+                                        @endif
+                                        <div class="p-4">
+                                            @if($article->category)
+                                                <span class="inline-block px-2 py-1 text-xs font-semibold text-[#F8A38A] bg-[#F8A38A]/10 rounded mb-2">
+                                                    {{ $article->category->name }}
+                                                </span>
+                                            @endif
+                                            <h3 class="text-lg font-semibold text-[#2A2E47] dark:text-[#FFFDF9] line-clamp-2 group-hover:text-[#F8A38A] transition-colors" style="font-family: 'Noto Sans JP', sans-serif; font-weight: 600;">
+                                                {{ $article->title }}
+                                            </h3>
+                                            @if($article->excerpt)
+                                                <p class="text-sm text-[#2A2E47]/70 dark:text-[#FFFDF9]/70 mt-2 line-clamp-2" style="font-family: 'Noto Sans JP', sans-serif;">
+                                                    {{ $article->excerpt }}
+                                                </p>
+                                            @endif
+                                            <time class="text-xs text-[#2A2E47]/50 dark:text-[#FFFDF9]/50 mt-2 block" datetime="{{ $article->published_at->format('Y-m-d') }}">
+                                                {{ $article->published_at->format('Y年m月d日') }}
+                                            </time>
+                                        </div>
+                                    </div>
+                                </a>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+        @else
+            <!-- モックデータ（記事がない場合） -->
+            <div class="relative overflow-hidden">
+                <div class="column-slider-wrapper">
+                    <div class="column-slider-track" id="columnSliderTop">
+                        @for($i = 0; $i < 8; $i++)
+                            <div class="column-slide">
+                                <div class="block group">
+                                    <div class="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow duration-300">
+                                        <div class="w-full h-48 bg-gradient-to-br from-[#F8A38A] to-[#E985A6] flex items-center justify-center">
+                                            <span class="text-4xl text-white">📝</span>
+                                        </div>
+                                        <div class="p-4">
+                                            <span class="inline-block px-2 py-1 text-xs font-semibold text-[#F8A38A] bg-[#F8A38A]/10 rounded mb-2">
+                                                サンプルカテゴリ
+                                            </span>
+                                            <h3 class="text-lg font-semibold text-[#2A2E47] dark:text-[#FFFDF9] line-clamp-2" style="font-family: 'Noto Sans JP', sans-serif; font-weight: 600;">
+                                                サンプル記事タイトル {{ $i + 1 }}
+                                            </h3>
+                                            <p class="text-sm text-[#2A2E47]/70 dark:text-[#FFFDF9]/70 mt-2 line-clamp-2" style="font-family: 'Noto Sans JP', sans-serif;">
+                                                これはサンプル記事の抜粋です。実際の記事を追加すると、ここに表示されます。
+                                            </p>
+                                            <time class="text-xs text-[#2A2E47]/50 dark:text-[#FFFDF9]/50 mt-2 block">
+                                                {{ now()->format('Y年m月d日') }}
+                                            </time>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        @endfor
+                        <!-- ループ用に最初の4つを複製 -->
+                        @for($i = 0; $i < 4; $i++)
+                            <div class="column-slide">
+                                <div class="block group">
+                                    <div class="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow duration-300">
+                                        <div class="w-full h-48 bg-gradient-to-br from-[#F8A38A] to-[#E985A6] flex items-center justify-center">
+                                            <span class="text-4xl text-white">📝</span>
+                                        </div>
+                                        <div class="p-4">
+                                            <span class="inline-block px-2 py-1 text-xs font-semibold text-[#F8A38A] bg-[#F8A38A]/10 rounded mb-2">
+                                                サンプルカテゴリ
+                                            </span>
+                                            <h3 class="text-lg font-semibold text-[#2A2E47] dark:text-[#FFFDF9] line-clamp-2" style="font-family: 'Noto Sans JP', sans-serif; font-weight: 600;">
+                                                サンプル記事タイトル {{ $i + 1 }}
+                                            </h3>
+                                            <p class="text-sm text-[#2A2E47]/70 dark:text-[#FFFDF9]/70 mt-2 line-clamp-2" style="font-family: 'Noto Sans JP', sans-serif;">
+                                                これはサンプル記事の抜粋です。実際の記事を追加すると、ここに表示されます。
+                                            </p>
+                                            <time class="text-xs text-[#2A2E47]/50 dark:text-[#FFFDF9]/50 mt-2 block">
+                                                {{ now()->format('Y年m月d日') }}
+                                            </time>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        @endfor
+                    </div>
+                </div>
+            </div>
+        @endif
+    </section>
 
     <script>
         document.addEventListener('livewire:initialized', () => {
@@ -489,6 +671,26 @@ new class extends Component {
                         block: 'start'
                     });
                 }, 100);
+            });
+        });
+
+        // コラムスライダーの無限ループ実装
+        document.addEventListener('DOMContentLoaded', () => {
+            const sliderTrack = document.getElementById('columnSliderTop');
+            if (!sliderTrack) return;
+
+            // 無限ループのためのクローン作成
+            const slides = Array.from(sliderTrack.children);
+            const cloneCount = 4; // 4画面表示用に4つクローン
+            
+            slides.slice(0, cloneCount).forEach(slide => {
+                const clone = slide.cloneNode(true);
+                sliderTrack.appendChild(clone);
+            });
+
+            // アニメーション終了時の処理（シームレスに戻す）
+            sliderTrack.addEventListener('animationiteration', () => {
+                // アニメーションをリセットせずに継続（CSSで無限ループ設定済み）
             });
         });
     </script>

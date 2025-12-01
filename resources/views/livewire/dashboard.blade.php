@@ -12,6 +12,9 @@ new class extends Component {
     public ?Mood $todayMood = null;
     public ?FortuneSummary $myFortune = null;
     public ?array $tarotCard = null;
+    public ?array $monthlyTheme = null;
+    public ?array $todayBiorhythm = null;
+    public array $weeklyBiorhythm = [];
 
     public int $moodRating = 3;
     public ?string $moodEmoji = null;
@@ -63,6 +66,15 @@ new class extends Component {
         $this->myFortune = FortuneSummary::where('user_id', $user->id)
             ->latest('calculated_at')
             ->first();
+        
+        // 月次テーマを取得
+        $this->monthlyTheme = $dailyFortuneService->getMonthlyTheme($user);
+        
+        // 今日のバイオリズムを取得
+        $this->todayBiorhythm = $dailyFortuneService->calculateBiorhythm($user);
+        
+        // 今週のバイオリズム推移を取得
+        $this->weeklyBiorhythm = $dailyFortuneService->getWeeklyBiorhythm($user);
     }
 
     /**
@@ -110,6 +122,122 @@ new class extends Component {
     {
         $this->showGuide = !$this->showGuide;
     }
+
+    /**
+     * 診断を再計算する
+     */
+    public function recalculateFortune(): void
+    {
+        $user = Auth::user();
+        
+        if (!$user->birth_date) {
+            session()->flash('error', '生年月日が登録されていません。プロフィール設定から生年月日を登録してください。');
+            return;
+        }
+        
+        $dailyFortuneService = app(DailyFortuneService::class);
+        $this->dailyFortune = $dailyFortuneService->calculateToday($user);
+        
+        // FortuneSummaryを更新
+        FortuneSummary::updateOrCreate(
+            [
+                'user_id' => $user->id,
+                'calculated_at' => today(),
+            ],
+            [
+                'birth_date' => $user->birth_date,
+                'birth_time' => $user->birth_time,
+                'birth_place' => $user->birth_place,
+                'four_pillars_result' => $this->dailyFortune['four_pillars'] ?? null,
+                'numerology_result' => $this->dailyFortune['numerology'] ?? null,
+                'ziwei_result' => $this->dailyFortune['ziwei'] ?? null,
+            ]
+        );
+        
+        $this->myFortune = FortuneSummary::where('user_id', $user->id)
+            ->latest('calculated_at')
+            ->first();
+        
+        session()->flash('success', '診断を再計算しました。');
+    }
+
+    /**
+     * 週の振り返りデータを取得
+     */
+    public function getWeeklyReportProperty()
+    {
+        $user = Auth::user();
+        $startDate = now()->subDays(6)->startOfDay();
+        $endDate = now()->endOfDay();
+        
+        $moods = Mood::where('user_id', $user->id)
+            ->whereBetween('date', [$startDate, $endDate])
+            ->orderBy('date')
+            ->get();
+        
+        if ($moods->isEmpty()) {
+            return null;
+        }
+        
+        $avgRating = $moods->avg('mood_rating');
+        $mostCommonEmoji = $moods->whereNotNull('mood_emoji')
+            ->groupBy('mood_emoji')
+            ->map->count()
+            ->sortDesc()
+            ->keys()
+            ->first();
+        
+        return [
+            'period' => $startDate->format('m/d') . ' - ' . $endDate->format('m/d'),
+            'total_days' => $moods->count(),
+            'avg_rating' => round($avgRating, 1),
+            'most_common_emoji' => $mostCommonEmoji,
+            'moods' => $moods,
+        ];
+    }
+
+    /**
+     * 月の振り返りデータを取得
+     */
+    public function getMonthlyReportProperty()
+    {
+        $user = Auth::user();
+        $startDate = now()->startOfMonth();
+        $endDate = now()->endOfMonth();
+        
+        $moods = Mood::where('user_id', $user->id)
+            ->whereBetween('date', [$startDate, $endDate])
+            ->orderBy('date')
+            ->get();
+        
+        if ($moods->isEmpty()) {
+            return null;
+        }
+        
+        $avgRating = $moods->avg('mood_rating');
+        $mostCommonEmoji = $moods->whereNotNull('mood_emoji')
+            ->groupBy('mood_emoji')
+            ->map->count()
+            ->sortDesc()
+            ->keys()
+            ->first();
+        
+        // 週ごとの平均を計算
+        $weeklyAverages = $moods->groupBy(function ($mood) {
+            return $mood->date->format('W');
+        })->map(function ($weekMoods) {
+            return round($weekMoods->avg('mood_rating'), 1);
+        });
+        
+        return [
+            'period' => $startDate->format('Y年m月'),
+            'total_days' => $moods->count(),
+            'avg_rating' => round($avgRating, 1),
+            'most_common_emoji' => $mostCommonEmoji,
+            'weekly_averages' => $weeklyAverages,
+            'moods' => $moods,
+        ];
+    }
 }; ?>
 
 <div class="flex h-full w-full flex-1 flex-col gap-6 rounded-xl" style="background-color: #FFFDF9;">
@@ -117,13 +245,36 @@ new class extends Component {
         @if($dailyFortune)
             <div class="bg-white/90 dark:bg-[#2A2E47]/90 backdrop-blur-sm rounded-xl border border-[#F8A38A]/30 dark:border-[#E985A6]/30 p-6 shadow-lg">
                 <div class="flex items-center justify-between mb-4">
-                    <h2 class="text-2xl font-semibold" style="color: #2A2E47; font-family: 'Noto Sans JP', sans-serif; font-weight: 700;">
-                        今日の運勢（Daily Light）
-                    </h2>
+                    <div class="flex items-center gap-4">
+                        <h2 class="text-2xl font-semibold" style="color: #2A2E47; font-family: 'Noto Sans JP', sans-serif; font-weight: 700;">
+                            今日の運勢（Daily Light）
+                        </h2>
+                        <flux:button 
+                            wire:click="recalculateFortune" 
+                            variant="ghost" 
+                            size="sm"
+                            class="text-xs"
+                            style="color: #F8A38A; font-family: 'Noto Sans JP', sans-serif;"
+                        >
+                            🔄 再計算
+                        </flux:button>
+                    </div>
                     <span class="text-sm" style="color: rgba(42, 46, 71, 0.7); font-family: 'Noto Sans JP', sans-serif;">
                         {{ now()->format('Y年m月d日') }}
                     </span>
                 </div>
+                
+                @if(session('success'))
+                    <div class="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded-lg text-sm">
+                        {{ session('success') }}
+                    </div>
+                @endif
+                
+                @if(session('error'))
+                    <div class="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
+                        {{ session('error') }}
+                    </div>
+                @endif
                 
                 <div class="grid md:grid-cols-3 gap-6">
                     <!-- テーマ -->
@@ -153,11 +304,150 @@ new class extends Component {
             </div>
         @endif
 
+        <!-- タロットスプレッドカード -->
+        <div class="bg-white/90 dark:bg-[#2A2E47]/90 backdrop-blur-sm rounded-xl border border-[#F9C97D]/30 dark:border-[#F9C97D]/30 p-6 shadow-lg">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-2xl font-semibold" style="color: #2A2E47; font-family: 'Noto Sans JP', sans-serif; font-weight: 700;">
+                    タロットスプレッド
+                </h2>
+                <flux:button wire:click="drawTarot" variant="primary" style="background-color: #F9C97D; color: #2A2E47; font-family: 'Noto Sans JP', sans-serif;">
+                    カードを引く
+                </flux:button>
+            </div>
+            
+            @if($tarotCard)
+                <div class="p-6 rounded-lg bg-[#F9C97D]/10 dark:bg-[#F9C97D]/10">
+                    <div class="flex flex-col md:flex-row gap-6 items-center md:items-start">
+                        <!-- カード画像 -->
+                        @if(!empty($tarotCard['card_image']))
+                            <div class="flex-shrink-0">
+                                <img 
+                                    src="{{ $tarotCard['card_image'] }}" 
+                                    alt="{{ $tarotCard['card_name'] ?? '' }}"
+                                    class="w-48 h-72 object-contain rounded-lg shadow-lg {{ $tarotCard['position'] === '逆位置' ? 'rotate-180' : '' }}"
+                                    onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"
+                                />
+                                <div class="w-48 h-72 bg-[#F9C97D]/20 rounded-lg shadow-lg flex items-center justify-center hidden" style="display: none;">
+                                    <span class="text-4xl">🃏</span>
+                                </div>
+                            </div>
+                        @else
+                            <div class="flex-shrink-0 w-48 h-72 bg-[#F9C97D]/20 rounded-lg shadow-lg flex items-center justify-center">
+                                <span class="text-4xl">🃏</span>
+                            </div>
+                        @endif
+                        
+                        <!-- カード情報 -->
+                        <div class="flex-1 text-center md:text-left">
+                            <div class="text-2xl mb-2" style="color: #2A2E47; font-family: 'Noto Sans JP', sans-serif; font-weight: 700;">
+                                {{ $tarotCard['card_name'] ?? '' }}
+                            </div>
+                            <div class="text-sm mb-4" style="color: #F9C97D; font-family: 'Noto Sans JP', sans-serif; font-weight: 600;">
+                                {{ $tarotCard['position'] ?? '' }}
+                            </div>
+                            <p class="text-base leading-relaxed" style="color: rgba(42, 46, 71, 0.8); font-family: 'Noto Sans JP', sans-serif;">
+                                {{ $tarotCard['message'] ?? '' }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            @else
+                <p class="text-center text-gray-500" style="font-family: 'Noto Sans JP', sans-serif;">
+                    「カードを引く」ボタンを押して、今この瞬間に必要なメッセージを受け取りましょう
+                </p>
+            @endif
+        </div>
+
+        <!-- 月次テーマカード -->
+        @if($monthlyTheme)
+            <div class="bg-white/90 dark:bg-[#2A2E47]/90 backdrop-blur-sm rounded-xl border border-[#F9C97D]/30 dark:border-[#F9C97D]/30 p-6 shadow-lg">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-2xl font-semibold" style="color: #2A2E47; font-family: 'Noto Sans JP', sans-serif; font-weight: 700;">
+                        今月のテーマ
+                    </h2>
+                    <span class="text-sm" style="color: rgba(42, 46, 71, 0.7); font-family: 'Noto Sans JP', sans-serif;">
+                        {{ now()->format('Y年m月') }}
+                    </span>
+                </div>
+                <div class="space-y-4">
+                    <div class="text-center p-6 rounded-lg bg-[#F9C97D]/10 dark:bg-[#F9C97D]/10">
+                        <div class="text-2xl mb-3" style="color: #2A2E47; font-family: 'Noto Sans JP', sans-serif; font-weight: 700;">
+                            🌅 {{ $monthlyTheme['theme'] }}
+                        </div>
+                        <p class="text-base leading-relaxed" style="color: rgba(42, 46, 71, 0.8); font-family: 'Noto Sans JP', sans-serif;">
+                            {{ $monthlyTheme['description'] }}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        @endif
+
+        <!-- バイオリズムカード -->
+        @if($todayBiorhythm)
+            <div class="bg-white/90 dark:bg-[#2A2E47]/90 backdrop-blur-sm rounded-xl border border-[#E985A6]/30 dark:border-[#F8A38A]/30 p-6 shadow-lg">
+                <h2 class="text-2xl font-semibold mb-4" style="color: #2A2E47; font-family: 'Noto Sans JP', sans-serif; font-weight: 700;">
+                    バイオリズム
+                </h2>
+                
+                <!-- 今日の値 -->
+                <div class="grid md:grid-cols-3 gap-4 mb-6">
+                    <div class="p-4 rounded-lg bg-[#F8A38A]/10 dark:bg-[#E985A6]/10">
+                        <div class="text-sm mb-2" style="color: rgba(42, 46, 71, 0.7); font-family: 'Noto Sans JP', sans-serif;">身体的</div>
+                        <div class="text-2xl font-semibold mb-2" style="color: #2A2E47; font-family: 'Noto Sans JP', sans-serif; font-weight: 600;">
+                            {{ number_format($todayBiorhythm['physical'], 1) }}%
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="bg-[#F8A38A] h-2 rounded-full" style="width: {{ $todayBiorhythm['physical'] }}%"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="p-4 rounded-lg bg-[#E985A6]/10 dark:bg-[#F8A38A]/10">
+                        <div class="text-sm mb-2" style="color: rgba(42, 46, 71, 0.7); font-family: 'Noto Sans JP', sans-serif;">感情的</div>
+                        <div class="text-2xl font-semibold mb-2" style="color: #2A2E47; font-family: 'Noto Sans JP', sans-serif; font-weight: 600;">
+                            {{ number_format($todayBiorhythm['emotional'], 1) }}%
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="bg-[#E985A6] h-2 rounded-full" style="width: {{ $todayBiorhythm['emotional'] }}%"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="p-4 rounded-lg bg-[#F9C97D]/10 dark:bg-[#F9C97D]/10">
+                        <div class="text-sm mb-2" style="color: rgba(42, 46, 71, 0.7); font-family: 'Noto Sans JP', sans-serif;">知的</div>
+                        <div class="text-2xl font-semibold mb-2" style="color: #2A2E47; font-family: 'Noto Sans JP', sans-serif; font-weight: 600;">
+                            {{ number_format($todayBiorhythm['intellectual'], 1) }}%
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="bg-[#F9C97D] h-2 rounded-full" style="width: {{ $todayBiorhythm['intellectual'] }}%"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 今週の推移グラフ -->
+                @if(count($weeklyBiorhythm) > 0)
+                    <div class="mt-6">
+                        <h3 class="text-lg font-semibold mb-4" style="color: #2A2E47; font-family: 'Noto Sans JP', sans-serif; font-weight: 600;">
+                            今週の推移
+                        </h3>
+                        <div class="relative h-64 bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                            <canvas id="biorhythmChart" class="w-full h-full"></canvas>
+                        </div>
+                    </div>
+                @endif
+            </div>
+        @endif
+
         <!-- 感情ログ（Mood Record）カード -->
         <div class="bg-white/90 dark:bg-[#2A2E47]/90 backdrop-blur-sm rounded-xl border border-[#F8A38A]/30 dark:border-[#E985A6]/30 p-6 shadow-lg">
-            <h2 class="text-2xl font-semibold mb-4" style="color: #2A2E47; font-family: 'Noto Sans JP', sans-serif; font-weight: 700;">
-                感情ログ（Mood Record）
-            </h2>
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-2xl font-semibold" style="color: #2A2E47; font-family: 'Noto Sans JP', sans-serif; font-weight: 700;">
+                    感情ログ（Mood Record）
+                </h2>
+                @if($todayMood)
+                    <span class="text-sm px-3 py-1 rounded-full bg-[#F8A38A]/20 text-[#2A2E47]" style="font-family: 'Noto Sans JP', sans-serif;">
+                        ✓ 今日記録済み
+                    </span>
+                @endif
+            </div>
             
             <form wire:submit="saveMood" class="space-y-4">
                 <!-- ハート5段階 -->
@@ -210,12 +500,94 @@ new class extends Component {
             </form>
         </div>
 
+        <!-- 占い師に相談（チャット） -->
+        <div class="mt-8">
+            <h2 class="text-2xl font-semibold mb-4" style="color: #2A2E47; font-family: 'Noto Sans JP', sans-serif; font-weight: 700;">
+                占い師に相談
+            </h2>
+            <livewire:chat.index />
+        </div>
+
+        <!-- 振り返りレポート -->
+        <div class="grid md:grid-cols-2 gap-6">
+            <!-- 週の振り返り -->
+            @if($this->weeklyReport)
+                <div class="bg-white/90 dark:bg-[#2A2E47]/90 backdrop-blur-sm rounded-xl border border-[#E985A6]/30 dark:border-[#F8A38A]/30 p-6 shadow-lg">
+                    <h2 class="text-xl font-semibold mb-4" style="color: #2A2E47; font-family: 'Noto Sans JP', sans-serif; font-weight: 700;">
+                        週の振り返り
+                    </h2>
+                    <div class="space-y-4">
+                        <div class="text-center p-4 rounded-lg bg-[#E985A6]/10 dark:bg-[#F8A38A]/10">
+                            <div class="text-sm mb-2" style="color: rgba(42, 46, 71, 0.7); font-family: 'Noto Sans JP', sans-serif;">
+                                {{ $this->weeklyReport['period'] }}
+                            </div>
+                            <div class="text-2xl font-semibold mb-1" style="color: #2A2E47; font-family: 'Noto Sans JP', sans-serif; font-weight: 600;">
+                                {{ $this->weeklyReport['avg_rating'] }}/5.0
+                            </div>
+                            <div class="text-sm" style="color: rgba(42, 46, 71, 0.7); font-family: 'Noto Sans JP', sans-serif;">
+                                {{ $this->weeklyReport['total_days'] }}日記録
+                            </div>
+                        </div>
+                        @if($this->weeklyReport['most_common_emoji'])
+                            <div class="text-center">
+                                <div class="text-3xl mb-2">{{ $this->weeklyReport['most_common_emoji'] }}</div>
+                                <div class="text-xs" style="color: rgba(42, 46, 71, 0.7); font-family: 'Noto Sans JP', sans-serif;">
+                                    よく使った絵文字
+                                </div>
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            @endif
+
+            <!-- 月の振り返り -->
+            @if($this->monthlyReport)
+                <div class="bg-white/90 dark:bg-[#2A2E47]/90 backdrop-blur-sm rounded-xl border border-[#F9C97D]/30 dark:border-[#F9C97D]/30 p-6 shadow-lg">
+                    <h2 class="text-xl font-semibold mb-4" style="color: #2A2E47; font-family: 'Noto Sans JP', sans-serif; font-weight: 700;">
+                        月の振り返り
+                    </h2>
+                    <div class="space-y-4">
+                        <div class="text-center p-4 rounded-lg bg-[#F9C97D]/10 dark:bg-[#F9C97D]/10">
+                            <div class="text-sm mb-2" style="color: rgba(42, 46, 71, 0.7); font-family: 'Noto Sans JP', sans-serif;">
+                                {{ $this->monthlyReport['period'] }}
+                            </div>
+                            <div class="text-2xl font-semibold mb-1" style="color: #2A2E47; font-family: 'Noto Sans JP', sans-serif; font-weight: 600;">
+                                {{ $this->monthlyReport['avg_rating'] }}/5.0
+                            </div>
+                            <div class="text-sm" style="color: rgba(42, 46, 71, 0.7); font-family: 'Noto Sans JP', sans-serif;">
+                                {{ $this->monthlyReport['total_days'] }}日記録
+                            </div>
+                        </div>
+                        @if($this->monthlyReport['most_common_emoji'])
+                            <div class="text-center">
+                                <div class="text-3xl mb-2">{{ $this->monthlyReport['most_common_emoji'] }}</div>
+                                <div class="text-xs" style="color: rgba(42, 46, 71, 0.7); font-family: 'Noto Sans JP', sans-serif;">
+                                    よく使った絵文字
+                                </div>
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            @endif
+        </div>
+
         <!-- My命式（詳細版）カード -->
         @if($myFortune)
             <div class="bg-white/90 dark:bg-[#2A2E47]/90 backdrop-blur-sm rounded-xl border border-[#F8A38A]/30 dark:border-[#E985A6]/30 p-6 shadow-lg">
-                <h2 class="text-2xl font-semibold mb-4" style="color: #2A2E47; font-family: 'Noto Sans JP', sans-serif; font-weight: 700;">
-                    My命式（詳細版）
-                </h2>
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-2xl font-semibold" style="color: #2A2E47; font-family: 'Noto Sans JP', sans-serif; font-weight: 700;">
+                        My命式（詳細版）
+                    </h2>
+                    <flux:button 
+                        wire:click="recalculateFortune" 
+                        variant="ghost" 
+                        size="sm"
+                        class="text-xs"
+                        style="color: #F8A38A; font-family: 'Noto Sans JP', sans-serif;"
+                    >
+                        🔄 再計算
+                    </flux:button>
+                </div>
                 
                 <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                     <!-- 四柱推命 -->
@@ -290,36 +662,6 @@ new class extends Component {
                 </flux:button>
             </div>
         @endif
-
-        <!-- タロットスプレッドカード -->
-        <div class="bg-white/90 dark:bg-[#2A2E47]/90 backdrop-blur-sm rounded-xl border border-[#F9C97D]/30 dark:border-[#F9C97D]/30 p-6 shadow-lg">
-            <div class="flex items-center justify-between mb-4">
-                <h2 class="text-2xl font-semibold" style="color: #2A2E47; font-family: 'Noto Sans JP', sans-serif; font-weight: 700;">
-                    タロットスプレッド
-                </h2>
-                <flux:button wire:click="drawTarot" variant="primary" style="background-color: #F9C97D; color: #2A2E47; font-family: 'Noto Sans JP', sans-serif;">
-                    カードを引く
-                </flux:button>
-            </div>
-            
-            @if($tarotCard)
-                <div class="p-6 rounded-lg bg-[#F9C97D]/10 dark:bg-[#F9C97D]/10 text-center">
-                    <div class="text-3xl mb-3" style="color: #2A2E47; font-family: 'Noto Sans JP', sans-serif; font-weight: 700;">
-                        {{ $tarotCard['card_name'] ?? '' }}
-                    </div>
-                    <div class="text-sm mb-4" style="color: #F9C97D; font-family: 'Noto Sans JP', sans-serif;">
-                        {{ $tarotCard['position'] ?? '' }}
-                    </div>
-                    <p class="text-base" style="color: rgba(42, 46, 71, 0.8); font-family: 'Noto Sans JP', sans-serif;">
-                        {{ $tarotCard['message'] ?? '' }}
-                    </p>
-                </div>
-            @else
-                <p class="text-center text-gray-500" style="font-family: 'Noto Sans JP', sans-serif;">
-                    「カードを引く」ボタンを押して、今この瞬間に必要なメッセージを受け取りましょう
-                </p>
-            @endif
-        </div>
 
         <!-- ガイドコンテンツ -->
         <div class="bg-white/90 dark:bg-[#2A2E47]/90 backdrop-blur-sm rounded-xl border border-[#F8A38A]/30 dark:border-[#E985A6]/30 p-6 shadow-lg">
@@ -424,4 +766,110 @@ new class extends Component {
             @endif
         </div>
 </div>
+
+@if(count($weeklyBiorhythm) > 0)
+    @push('scripts')
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script>
+        document.addEventListener('livewire:init', () => {
+            const ctx = document.getElementById('biorhythmChart');
+            if (!ctx) return;
+
+            const weeklyData = @json($weeklyBiorhythm);
+            
+            const labels = weeklyData.map(item => item.day_label);
+            const physicalData = weeklyData.map(item => item.physical);
+            const emotionalData = weeklyData.map(item => item.emotional);
+            const intellectualData = weeklyData.map(item => item.intellectual);
+
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: '身体的',
+                            data: physicalData,
+                            borderColor: '#F8A38A',
+                            backgroundColor: 'rgba(248, 163, 138, 0.1)',
+                            tension: 0.4,
+                            fill: true,
+                        },
+                        {
+                            label: '感情的',
+                            data: emotionalData,
+                            borderColor: '#E985A6',
+                            backgroundColor: 'rgba(233, 133, 166, 0.1)',
+                            tension: 0.4,
+                            fill: true,
+                        },
+                        {
+                            label: '知的',
+                            data: intellectualData,
+                            borderColor: '#F9C97D',
+                            backgroundColor: 'rgba(249, 201, 125, 0.1)',
+                            tension: 0.4,
+                            fill: true,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                font: {
+                                    family: "'Noto Sans JP', sans-serif",
+                                },
+                                color: '#2A2E47'
+                            }
+                        },
+                        tooltip: {
+                            font: {
+                                family: "'Noto Sans JP', sans-serif",
+                            },
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + context.parsed.y.toFixed(1) + '%';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                font: {
+                                    family: "'Noto Sans JP', sans-serif",
+                                },
+                                color: '#2A2E47',
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(42, 46, 71, 0.1)'
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                font: {
+                                    family: "'Noto Sans JP', sans-serif",
+                                },
+                                color: '#2A2E47'
+                            },
+                            grid: {
+                                color: 'rgba(42, 46, 71, 0.1)'
+                            }
+                        }
+                    }
+                }
+            });
+        });
+    </script>
+    @endpush
+@endif
 

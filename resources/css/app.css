@@ -104,3 +104,64 @@ select:focus[data-flux-control] {
 /* \[:where(&)\]:size-4 {
     @apply size-4;
 } */
+
+/* コラムスライダー */
+.column-slider-wrapper {
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+}
+
+.column-slider-track {
+    display: flex;
+    gap: 1rem;
+    will-change: transform;
+}
+
+.column-slide {
+    flex: 0 0 calc(25% - 0.75rem); /* PC: 4画面 */
+    min-width: 0;
+}
+
+@media (max-width: 768px) {
+    .column-slide {
+        flex: 0 0 calc(100% - 0.75rem); /* 携帯: 1画面 */
+    }
+}
+
+/* デスクトップ用アニメーション */
+@media (min-width: 769px) {
+    .column-slider-track {
+        animation: slideDesktop 40s linear infinite;
+    }
+    
+    @keyframes slideDesktop {
+        0% {
+            transform: translateX(0);
+        }
+        100% {
+            transform: translateX(calc(-25% - 0.25rem)); /* 1画面分スライド（4画面表示時） */
+        }
+    }
+}
+
+/* モバイル用アニメーション */
+@media (max-width: 768px) {
+    .column-slider-track {
+        animation: slideMobile 30s linear infinite;
+    }
+    
+    @keyframes slideMobile {
+        0% {
+            transform: translateX(0);
+        }
+        100% {
+            transform: translateX(calc(-100% - 1rem)); /* 1画面分スライド */
+        }
+    }
+}
+
+/* スライダーの一時停止（ホバー時） */
+.column-slider-wrapper:hover .column-slider-track {
+    animation-play-state: paused;
+}
